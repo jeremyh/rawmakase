@@ -999,8 +999,7 @@ fn shots_of_the_point_curve_and_its_menu() {
             });
         },
     );
-    // Each color channel over a photo-like histogram, raised in the shadows and
-    // lowered in the highlights, so its line shows both colors.
+    // Each color channel over a photo-like histogram, for the well's wash.
     let histogram: [[u32; 256]; 3] = std::array::from_fn(|c| {
         std::array::from_fn(|i| {
             let x = i as f32 / 255. - 0.35 - c as f32 * 0.08;
