@@ -665,6 +665,37 @@ fn curve_backdrop(ui: &egui::Ui, rect: Rect, histogram: &[[u32; 256]; 3], channe
         egui::StrokeKind::Outside,
     );
 }
+/// The color lowering channel `channel`'s curve (1–3 are R, G, B) adds: cyan,
+/// magenta or yellow, as light as [`curve_color`]'s channel colors.
+fn curve_complement(channel: usize) -> Color32 {
+    match channel {
+        1 => Color32::from_rgb(95, 205, 215),
+        2 => Color32::from_rgb(215, 120, 210),
+        _ => Color32::from_rgb(235, 205, 105),
+    }
+}
+/// The color of channel `channel`'s curve (0 is RGB, 1–3 are R, G, B) where
+/// it passes through `[x, y]`, both 0–1. Raising an R, G or B curve adds that
+/// color and lowering it adds its complement, so the line keeps the channel's
+/// color on and above the diagonal and turns to the complement below it. It
+/// turns only once clearly below, so a curve near the diagonal doesn't flicker.
+fn curve_line_color(palette: &theme::Palette, channel: usize, [x, y]: [f32; 2]) -> Color32 {
+    const CLEAR: f32 = 0.015;
+    const TURNED: f32 = 0.07;
+    let color = curve_color(palette, channel);
+    if !(1..=3).contains(&channel) {
+        return color;
+    }
+    let t = ((x - y - CLEAR) / (TURNED - CLEAR)).clamp(0., 1.);
+    let t = t * t * (3. - 2. * t);
+    let complement = curve_complement(channel);
+    let mix = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * t).round() as u8;
+    Color32::from_rgb(
+        mix(color.r(), complement.r()),
+        mix(color.g(), complement.g()),
+        mix(color.b(), complement.b()),
+    )
+}
 fn curve_color(palette: &theme::Palette, channel: usize) -> Color32 {
     match channel {
         1 => Color32::from_rgb(240, 110, 100),
@@ -1022,19 +1053,25 @@ pub(in crate::app) fn tone_curve_ui(
     });
     curve_backdrop(ui, rect, histogram, channel);
     let plot = crate::color::curve::CurveLut::new(curve);
-    let color = curve_color(&palette, channel);
     let pts = (0..=256)
         .map(|i| {
             let x = i as f32 / 256.;
             screen([x, plot.evaluate(x)])
         })
         .collect();
+    let line = egui::epaint::PathStroke::new_uv(1.75, move |_, p| {
+        let x = (p.x - rect.left()) / rect.width();
+        let y = (rect.bottom() - p.y) / rect.height();
+        curve_line_color(&palette, channel, [x, y])
+    });
     ui.painter()
         .with_clip_rect(rect.expand(1.))
-        .add(egui::Shape::line(pts, Stroke::new(1.75, color)));
-    // Hollow handles, filled once selected, haloed while under the pointer.
-    for (i, p) in curve.points.iter().enumerate() {
-        let p = screen(*p);
+        .add(egui::epaint::PathShape::line(pts, line));
+    // Hollow handles, filled once selected, haloed while under the pointer,
+    // each in the line's color where it sits.
+    for (i, point) in curve.points.iter().enumerate() {
+        let color = curve_line_color(&palette, channel, *point);
+        let p = screen(*point);
         let selected = state.selected == Some(i);
         let hovered = hit == Some(i) || state.dragging.is_some_and(|d| d.point == i);
         if hovered {

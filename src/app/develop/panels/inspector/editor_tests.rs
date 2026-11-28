@@ -999,6 +999,40 @@ fn shots_of_the_point_curve_and_its_menu() {
             });
         },
     );
+    // Each color channel over a photo-like histogram, raised in the shadows and
+    // lowered in the highlights, so its line shows both colors.
+    let histogram: [[u32; 256]; 3] = std::array::from_fn(|c| {
+        std::array::from_fn(|i| {
+            let x = i as f32 / 255. - 0.35 - c as f32 * 0.08;
+            (4000. * (-x * x * 14.).exp()) as u32 + 60
+        })
+    });
+    for (channel, name) in [(1, "red"), (2, "green"), (3, "blue")] {
+        crate::app::ui::shots::shot(
+            &format!("point-curve-{name}"),
+            Vec2::new(320., 400.),
+            |e, _| {
+                e.view.parametric_curve = false;
+                e.view.selected_curve = channel;
+            },
+            |e, ctx| {
+                let mut recipe = crate::model::recipe::Recipe::default();
+                recipe.effects.channels[channel - 1].points =
+                    vec![[0., 0.], [0.3, 0.38], [0.75, 0.64], [1., 1.]];
+                crate::app::ui::shots::panel(ctx, 300., |ui| {
+                    super::panels::tone_curve::show(
+                        ui,
+                        &mut Default::default(),
+                        &mut recipe,
+                        &mut e.view,
+                        || histogram,
+                        None,
+                        &[],
+                    );
+                });
+            },
+        );
+    }
     for (name, menu) in [
         (
             "point-curve-menu",
